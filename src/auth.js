@@ -344,9 +344,24 @@ async function registerWithCodeium(idToken) {
 /**
  * Add account via API key.
  */
-export function addAccountByKey(apiKey, label = '') {
-  const existing = accounts.find(a => a.apiKey === apiKey);
-  if (existing) return existing;
+export function addAccountByKey(apiKey, label = '', { allowDuplicate = false } = {}) {
+  const existingKey = accounts.find(a => a.apiKey === apiKey);
+  if (existingKey && !allowDuplicate) {
+    const err = new Error('ERR_DUPLICATE_API_KEY');
+    err.code = 'ERR_DUPLICATE_API_KEY';
+    err.duplicateAccount = { id: existingKey.id, email: existingKey.email };
+    throw err;
+  }
+  if (existingKey) return existingKey;
+
+  const email = label || `key-${apiKey.slice(0, 8)}`;
+  const existingEmail = accounts.find(a => a.email === email);
+  if (existingEmail) {
+    const err = new Error('ERR_DUPLICATE_EMAIL');
+    err.code = 'ERR_DUPLICATE_EMAIL';
+    err.duplicateAccount = { id: existingEmail.id, email: existingEmail.email };
+    throw err;
+  }
 
   const account = {
     id: randomUUID().slice(0, 8),
@@ -378,8 +393,22 @@ export function addAccountByKey(apiKey, label = '') {
  */
 export async function addAccountByToken(token, label = '') {
   const reg = await registerWithCodeium(token);
-  const existing = accounts.find(a => a.apiKey === reg.apiKey);
-  if (existing) return existing;
+  const existingKey = accounts.find(a => a.apiKey === reg.apiKey);
+  if (existingKey) {
+    const err = new Error('ERR_DUPLICATE_API_KEY');
+    err.code = 'ERR_DUPLICATE_API_KEY';
+    err.duplicateAccount = { id: existingKey.id, email: existingKey.email };
+    throw err;
+  }
+
+  const email = label || reg.name || `token-${reg.apiKey.slice(0, 8)}`;
+  const existingEmail = accounts.find(a => a.email === email);
+  if (existingEmail) {
+    const err = new Error('ERR_DUPLICATE_EMAIL');
+    err.code = 'ERR_DUPLICATE_EMAIL';
+    err.duplicateAccount = { id: existingEmail.id, email: existingEmail.email };
+    throw err;
+  }
 
   const account = {
     id: randomUUID().slice(0, 8),
@@ -517,13 +546,17 @@ export function getAvailableModelsForAccount(account) {
 }
 
 /**
- * Set account status (active, disabled, error).
+ * Set account status (active, disabled, error, cooldown).
  */
 export function setAccountStatus(id, status) {
   const account = accounts.find(a => a.id === id);
   if (!account) return false;
   account.status = status;
-  if (status === 'active') account.errorCount = 0;
+  if (status === 'active') {
+    account.errorCount = 0;
+    account.consecutiveErrors = 0;
+    account.rateLimitedUntil = 0;
+  }
   saveAccounts();
   log.info(`Account ${id} status set to ${status}`);
   return true;
@@ -655,6 +688,15 @@ export function getApiKey(excludeKeys = [], modelKey = null, callerKey = null) {
 
   const candidates = [];
   for (const a of accounts) {
+    // Auto-recover accounts that were in cooldown if the cooldown has expired
+    if (a.status === 'cooldown' && a.rateLimitedUntil && now >= a.rateLimitedUntil) {
+      a.status = 'active';
+      a.errorCount = 0;
+      a.consecutiveErrors = 0;
+      a.rateLimitedUntil = 0;
+      log.info(`Account ${a.id} (${a.email}) recovered from cooldown`);
+      saveAccounts();
+    }
     if (a.status !== 'active') continue;
     if (excludeKeys.includes(a.apiKey)) continue;
     if (isRateLimitedForModel(a, modelKey, now)) continue;
@@ -917,15 +959,62 @@ function isRateLimitedForModel(account, modelKey, now) {
 
 /**
  * Report an error for an API key (increment error count, auto-disable).
+ *
+ * Error escalation policy:
+ *   - Per-request: up to 3 consecutive failures on one account → rotate to next
+ *   - Per-account: 5 cumulative failures in current cycle → cooldown until tomorrow
+ *   - Global: 50 consecutive failures across all accounts (no success in between)
+ *     → auto-remove the account from the pool
  */
+const MAX_CONSECUTIVE_PER_REQUEST = 3;
+const MAX_CUMULATIVE_PER_ACCOUNT = 5;
+const MAX_GLOBAL_CONSECUTIVE = 50;
+
+// Global consecutive failure counter (reset on any success)
+let _globalConsecutiveFailures = 0;
+
+export function getGlobalConsecutiveFailures() {
+  return _globalConsecutiveFailures;
+}
+
 export function reportError(apiKey) {
   const account = accounts.find(a => a.apiKey === apiKey);
   if (!account) return;
   account.errorCount++;
-  if (account.errorCount >= 3) {
+  account.consecutiveErrors = (account.consecutiveErrors || 0) + 1;
+  _globalConsecutiveFailures++;
+
+  // Per-request rotation: after 3 consecutive errors, temporarily cool down
+  if (account.consecutiveErrors >= MAX_CONSECUTIVE_PER_REQUEST) {
+    // Cool down for 60 seconds to let the upstream recover
+    account.rateLimitedUntil = Date.now() + 60_000;
+    log.warn(`Account ${account.id} (${account.email}) rotated out after ${account.consecutiveErrors} consecutive errors (60s cooldown)`);
+  }
+
+  // Per-account: 5 cumulative errors → disable until tomorrow
+  if (account.errorCount >= MAX_CUMULATIVE_PER_ACCOUNT) {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    account.rateLimitedUntil = tomorrow.getTime();
+    account.status = 'cooldown';
+    log.warn(`Account ${account.id} (${account.email}) entered cooldown until tomorrow after ${account.errorCount} cumulative errors`);
+  }
+
+  // Global: 50 consecutive failures without any success → auto-remove
+  if (_globalConsecutiveFailures >= MAX_GLOBAL_CONSECUTIVE) {
+    log.error(`Account ${account.id} (${account.email}) auto-removed after ${_globalConsecutiveFailures} global consecutive failures (no success in between)`);
+    removeAccount(account.id);
+    _globalConsecutiveFailures = 0;
+    saveAccounts();
+    return;
+  }
+
+  if (account.errorCount >= 3 && account.status === 'active') {
     account.status = 'error';
     log.warn(`Account ${account.id} (${account.email}) disabled after ${account.errorCount} errors`);
   }
+  saveAccounts();
 }
 
 /**
@@ -938,7 +1027,8 @@ export function reportSuccess(apiKey) {
     account.errorCount = 0;
     account.status = 'active';
   }
-  account.internalErrorStreak = 0;
+  account.consecutiveErrors = 0;
+  _globalConsecutiveFailures = 0;
   // v2.0.56: any successful chat clears the ban-signal streak — Windsurf's
   // "Authentication failed" can fire transiently during deploys, so we
   // only mark banned when the streak isn't broken by a real success.
@@ -1156,6 +1246,8 @@ export function getAccountList() {
       tierModels: getTierModels(a.tier || 'unknown'),
       userStatus: a.userStatus || null,
       userStatusLastFetched: a.userStatusLastFetched || 0,
+      consecutiveErrors: a.consecutiveErrors || 0,
+      globalConsecutiveFailures: _globalConsecutiveFailures,
     };
   });
 }
@@ -1507,6 +1599,9 @@ export function getAccountCount() {
     total: accounts.length,
     active: accounts.filter(a => a.status === 'active').length,
     error: accounts.filter(a => a.status === 'error').length,
+    cooldown: accounts.filter(a => a.status === 'cooldown').length,
+    banned: accounts.filter(a => a.status === 'banned').length,
+    globalConsecutiveFailures: _globalConsecutiveFailures,
   };
 }
 

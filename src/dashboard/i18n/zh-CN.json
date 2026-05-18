@@ -188,7 +188,7 @@
     },
     "emailLogin": {
       "title": "邮箱密码登录",
-      "desc": "仅限邮箱+密码注册的账号 第三方登录请用上面的按钮；支持单个登录或按「邮箱 密码」格式批量导入"
+      "desc": "支持三种格式：邮箱+密码登录、Auth Token 直接导入、API Key 导入。自动识别格式"
     },
     "loginProxy": {
       "title": "登录代理（可选）",
@@ -373,7 +373,7 @@
     },
     "batchInput": {
       "label": "批量导入",
-      "hint": "每行一个账号。格式：[代理] 邮箱 密码，或 邮箱----密码----Auth Token。代理可选，支持 http/socks5；中文说明行会自动忽略。"
+      "hint": "每行一个账号，自动识别格式：[代理] 邮箱 密码 / 邮箱----密码----Token / devin-session-token$... / sk-ws-...。代理可选，支持 http/socks5。"
     },
     "proxyType": {
       "label": "类型"
@@ -839,6 +839,7 @@
     "importComplete": "批量导入完成：成功 {{success}} / 失败 {{fail}}",
     "success": "成功",
     "fail": "失败",
+    "duplicate": "重复",
     "formatError": "第 {{line}} 行格式错误"
   },
 

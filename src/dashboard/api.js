@@ -85,11 +85,55 @@ export function buildBatchProxyBinding(result, proxy) {
   };
 }
 
+function extractTokenLabel(token) {
+  // Try to decode JWT payload to extract session_id for a readable label
+  const jwtMatch = token.match(/^devin-session-token\$([a-zA-Z0-9._-]+)$/);
+  if (jwtMatch) {
+    const parts = jwtMatch[1].split('.');
+    if (parts.length === 3) {
+      try {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+        if (payload.session_id) return payload.session_id;
+      } catch {}
+    }
+    // Fallback: use first 12 chars of the JWT body as label
+    return 'token-' + jwtMatch[1].slice(0, 12);
+  }
+  // sk-ws- keys
+  if (token.startsWith('sk-ws-')) return token.slice(0, 20) + '...';
+  // Generic: first 16 chars
+  return 'key-' + token.slice(0, 16);
+}
+
 export function parseBatchImportLine(line) {
   const trimmed = String(line || '').trim();
   if (!trimmed) return null;
   // Caption lines copied from card/image batches, e.g. "第6张", should not
-  // become failed account rows. Keep malformed email-looking lines visible.
+  // become failed account rows.
+  if (/^[一-鿿\w]*$/.test(trimmed) && trimmed.length < 10) return null;
+
+  // Token-only mode: line is (or starts with) a known auth token prefix.
+  // Supported patterns:
+  //   devin-session-token$eyJhbGci...
+  //   sk-ws-01-...
+  //   [proxy] devin-session-token$...
+  //   [proxy] sk-ws-01-...
+  const TOKEN_PREFIX_RE = /^(?:devin-session-token\$|sk-ws-)/;
+
+  // Case 1: entire line is just a token
+  if (TOKEN_PREFIX_RE.test(trimmed)) {
+    return { mode: 'token', proxy: null, token: trimmed, label: extractTokenLabel(trimmed) };
+  }
+
+  // Case 2: proxy followed by token
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 2 && (parts[0].includes('://') || /^\w+:\d+$/.test(parts[0]))) {
+    if (TOKEN_PREFIX_RE.test(parts[1])) {
+      return { mode: 'token', proxy: parts[0], token: parts[1], label: extractTokenLabel(parts[1]) };
+    }
+  }
+
+  // Email-password mode (original logic)
   if (!trimmed.includes('@')) return null;
 
   let proxy = null;
@@ -103,7 +147,6 @@ export function parseBatchImportLine(line) {
     password = dashed[1] || '';
     authToken = dashed.slice(2).join('----');
   } else {
-    const parts = trimmed.split(/\s+/);
     if (parts.length >= 3 && (parts[0].includes('://') || parts[0].includes(':'))) {
       proxy = parts[0];
       email = parts[1];
@@ -124,7 +167,7 @@ export function parseBatchImportLine(line) {
     throw new Error('ERR_FORMAT_INVALID');
   }
 
-  return { proxy, email, password, authToken };
+  return { mode: 'login', proxy, email, password, authToken };
 }
 
 function json(res, status, body) {
@@ -571,6 +614,15 @@ export async function handleDashboardApi(method, subpath, body, req, res) {
         ...getAccountCount(),
       });
     } catch (err) {
+      if (err.code === 'ERR_DUPLICATE_API_KEY' || err.code === 'ERR_DUPLICATE_EMAIL') {
+        return json(res, 409, {
+          error: err.code,
+          message: err.code === 'ERR_DUPLICATE_API_KEY'
+            ? `账号已重复：API Key 已存在于池中 (${err.duplicateAccount?.email || 'unknown'})`
+            : `账号已重复：邮箱 ${err.duplicateAccount?.email || ''} 已存在于池中`,
+          duplicateAccount: err.duplicateAccount || null,
+        });
+      }
       return json(res, 400, { error: err.message });
     }
   }
@@ -1299,8 +1351,9 @@ export async function handleDashboardApi(method, subpath, body, req, res) {
 
   // ─── Batch proxy + account import ─────────────────────
   // POST /batch-import — each line:
-  //   "proxy email password", "email password", or
-  //   "email----password----devin-session-token$..."
+  //   "proxy email password", "email password",
+  //   "email----password----devin-session-token$...",
+  //   "devin-session-token$...", or "sk-ws-..."
   if (subpath === '/batch-import' && method === 'POST') {
     try {
       const { text, autoAdd = true } = body || {};
@@ -1322,21 +1375,47 @@ export async function handleDashboardApi(method, subpath, body, req, res) {
           skippedCount += 1;
           continue;
         }
-        const { proxy, email, password, authToken } = parsed;
         try {
-          const loginProxy = proxy ? parseProxyUrl(proxy) : getProxyConfig().global;
-          const result = authToken
-            ? await processWindsurfTokenImport({ email, token: authToken, loginProxy, autoAdd })
-            : await processWindsurfLogin({ email, password, loginProxy, autoAdd });
-          const binding = buildBatchProxyBinding(result, proxy);
-          if (binding) {
+          let result;
+          const loginProxy = parsed.proxy
+            ? parseProxyUrl(parsed.proxy)
+            : getProxyConfig().global;
+
+          if (parsed.mode === 'token') {
+            result = await processWindsurfTokenImport({
+              email: parsed.label,
+              token: parsed.token,
+              loginProxy,
+              autoAdd,
+            });
+            const binding = buildBatchProxyBinding(result, parsed.proxy);
+            if (binding) {
+              setAccountProxy(binding.accountId, binding.proxy);
+              result.proxy = parsed.proxy;
+              ensureLsForAccount(binding.accountId).catch(() => {});
+            }
+          } else {
+            const { proxy, email, password, authToken } = parsed;
+            result = authToken
+              ? await processWindsurfTokenImport({ email, token: authToken, loginProxy, autoAdd })
+              : await processWindsurfLogin({ email, password, loginProxy, autoAdd });
+            const binding = buildBatchProxyBinding(result, proxy);
+            if (binding) {
               setAccountProxy(binding.accountId, binding.proxy);
               result.proxy = proxy;
               ensureLsForAccount(binding.accountId).catch(() => {});
+            }
           }
           results.push(result);
         } catch (err) {
-          results.push({ success: false, email, error: err.message });
+          const isDup = err.code === 'ERR_DUPLICATE_API_KEY' || err.code === 'ERR_DUPLICATE_EMAIL';
+          results.push({
+            success: false,
+            email: parsed.email || parsed.label || line.slice(0, 30),
+            error: isDup ? '账号已重复' : err.message,
+            isDuplicate: isDup,
+            ...(isDup ? { duplicateAccount: err.duplicateAccount || null } : {}),
+          });
         }
       }
       if (!results.length) return json(res, 400, { error: 'ERR_NO_VALID_LINES', skippedCount });

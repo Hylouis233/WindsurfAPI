@@ -45,12 +45,66 @@ describe('dashboard batch import proxy binding', () => {
     assert.deepEqual(
       parseBatchImportLine(`bronwyn.eh.l.enscn.82@gmail.com----Windsurf@2025----${token}`),
       {
+        mode: 'login',
         proxy: null,
         email: 'bronwyn.eh.l.enscn.82@gmail.com',
         password: 'Windsurf@2025',
         authToken: token,
       },
     );
+  });
+
+  it('detects devin-session-token lines as token-only mode', () => {
+    const token = 'devin-session-token$eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzZXNzaW9uX2lkIjoid2luZHN1cmYtc2Vzc2lvbi0zZGYxYWVhNmYxM2U0MmY5ODlmMjM5YmMxYTljNzhkOCJ9.3trik0CSga52VpTlz49jZFrmgedN6-iq_LQqRDmnjkw';
+    const parsed = parseBatchImportLine(token);
+    assert.equal(parsed.mode, 'token');
+    assert.equal(parsed.token, token);
+    assert.equal(parsed.proxy, null);
+    assert.ok(parsed.label);
+    assert.match(parsed.label, /windsurf-session-/);
+  });
+
+  it('detects sk-ws- key lines as token-only mode', () => {
+    const parsed = parseBatchImportLine('sk-ws-01-abcdef123456');
+    assert.equal(parsed.mode, 'token');
+    assert.equal(parsed.token, 'sk-ws-01-abcdef123456');
+    assert.equal(parsed.proxy, null);
+    assert.ok(parsed.label.startsWith('sk-ws-01-'));
+  });
+
+  it('detects proxy + token lines as token-only mode', () => {
+    const token = 'devin-session-token$eyJhbGciOiJIUzI1NiJ9.abc.def';
+    const parsed = parseBatchImportLine(`socks5://proxy:1080 ${token}`);
+    assert.equal(parsed.mode, 'token');
+    assert.equal(parsed.token, token);
+    assert.equal(parsed.proxy, 'socks5://proxy:1080');
+  });
+
+  it('batch-import auto-detects token-only lines and adds as token import', async () => {
+    config.dashboardPassword = '';
+    config.apiKey = '';
+    configureBindHost('127.0.0.1');
+
+    const text = [
+      'devin-session-token$eyJhbGciOiJIUzI1NiJ9.abc.def',
+      'sk-ws-01-testkey123',
+    ].join('\n');
+
+    const res = fakeRes();
+    await handleDashboardApi(
+      'POST',
+      '/batch-import',
+      { text, autoAdd: false },
+      { headers: {}, socket: { remoteAddress: '127.0.0.1' } },
+      res,
+    );
+
+    const body = res.json();
+    assert.equal(res.statusCode, 200);
+    assert.equal(body.total, 2);
+    assert.equal(body.successCount, 2);
+    assert.equal(body.results[0].apiKey, 'devin-session-token$eyJhbGciOiJIUzI1NiJ9.abc.def');
+    assert.equal(body.results[1].apiKey, 'sk-ws-01-testkey123');
   });
 
   it('batch-import accepts captioned token dumps without hitting upstream login when autoAdd is off', async () => {

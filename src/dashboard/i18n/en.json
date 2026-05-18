@@ -188,7 +188,7 @@
     },
     "emailLogin": {
       "title": "Email & Password Login",
-      "desc": "For accounts registered with email+password only. Third-party login please use buttons above. Supports single login or batch import in \"[proxy] email password\" format."
+      "desc": "Supports three formats: email+password login, Auth Token direct import, API Key import. Auto-detects format."
     },
     "loginProxy": {
       "title": "Login Proxy (Optional)",
@@ -390,7 +390,7 @@
     },
     "batchInput": {
       "label": "Batch Import",
-      "hint": "One account per line. Format: [proxy] email password, or email----password----Auth Token. Proxy is optional, supports http/socks5; caption lines are ignored."
+      "hint": "One account per line, auto-detected: [proxy] email password / email----password----Token / devin-session-token$... / sk-ws-... Proxy optional, supports http/socks5."
     },
     "proxyType": {
       "label": "Type"
@@ -839,6 +839,7 @@
     "importComplete": "Batch import complete: success {{success}} / failed {{fail}}",
     "success": "Success",
     "fail": "Fail",
+    "duplicate": "Duplicate",
     "formatError": "Line {{line}} format error"
   },
 
