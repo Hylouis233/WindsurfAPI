@@ -1767,6 +1767,10 @@ window._firebaseOAuth = async function(provider) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <span data-i18n="action.probe">全部探测</span>
         </button>
+        <button class="btn btn-outline" onclick="App.disableRateLimited()" id="btn-disable-rl" title="一键禁用所有被限流的账号">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+          <span>禁用限流账号</span>
+        </button>
       </div>
     </div>
     <!-- Progress bar for probe-all / refresh-credits -->
@@ -3499,6 +3503,9 @@ docker compose up -d --force-recreate</pre>
            </button>`
         : `<span class="text-xs text-dim">-</span>`;
       const rateLimitBadge = a.rateLimited ? ` <span class="badge warn">${I18n.t('card.rateLimit.badge')}</span>` : '';
+      const hasModelLimits = a.modelRateLimits && Object.keys(a.modelRateLimits).length > 0;
+      const everRateLimited = a.rateLimited || hasModelLimits || (a.rateLimitedUntil && a.rateLimitedUntil > 0);
+      const rateLimitTag = everRateLimited ? `<span class="badge warn" style="margin-left:4px;font-size:10px">限流</span>` : '';
       const rpmUsed = a.rpmUsed ?? 0;
       const rpmLimit = a.rpmLimit ?? 0;
       const rpmPct = rpmLimit > 0 ? Math.min(100, Math.round((rpmUsed / rpmLimit) * 100)) : 0;
@@ -4135,6 +4142,30 @@ docker compose up -d --force-recreate</pre>
   },
 
   async toggleAccount(id, status) { await this.api('PATCH', `/accounts/${id}`, { status }); this.loadAccounts(); },
+
+  async disableRateLimited() {
+    const data = await this.api('GET', '/accounts');
+    const accts = (data.accounts || []).filter(a => {
+      if (a.status !== 'active') return false;
+      const hasLimit = a.rateLimited || (a.rateLimitedUntil && a.rateLimitedUntil > 0);
+      const hasModelLimits = a.modelRateLimits && Object.keys(a.modelRateLimits).length > 0;
+      return hasLimit || hasModelLimits;
+    });
+    if (!accts.length) { this.toast('没有处于限流状态的账号', 'info'); return; }
+    const confirmed = await this.confirm(
+      `禁用 ${accts.length} 个限流账号`,
+      accts.map(a => a.email).join('<br>'),
+      { html: true }
+    );
+    if (!confirmed) return;
+    let ok = 0;
+    for (const a of accts) {
+      await this.api('PATCH', `/accounts/${a.id}`, { status: 'disabled' });
+      ok++;
+    }
+    this.toast(`已禁用 ${ok} 个限流账号`, 'success');
+    this.loadAccounts();
+  },
 
   async overrideTier(id, current) {
     const newTier = await this.prompt(
