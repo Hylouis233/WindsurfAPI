@@ -1759,15 +1759,25 @@ window._firebaseOAuth = async function(provider) {
         <div class="page-subtitle" data-i18n="pageSubtitle.accounts">维护账号池，探测各账号订阅层级与可用模型</div>
       </div>
       <div class="btn-group">
-        <button class="btn btn-outline" onclick="App.refreshAllCredits()">
+        <button class="btn btn-outline" onclick="App.refreshAllCredits()" id="btn-refresh-credits">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-6.24-2.52L3 21"/><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 6.24 2.52L21 3"/><path d="M21 3v6h-6"/><path d="M3 21v-6h6"/></svg>
           <span data-i18n="action.refresh">刷新余额</span>
         </button>
-        <button class="btn btn-outline" onclick="App.probeAll()">
+        <button class="btn btn-outline" onclick="App.probeAll()" id="btn-probe-all">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <span data-i18n="action.probe">全部探测</span>
         </button>
       </div>
+    </div>
+    <!-- Progress bar for probe-all / refresh-credits -->
+    <div id="bulk-progress" style="display:none;margin:0 0 16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+          <div id="bulk-progress-bar" style="height:100%;width:0%;background:var(--primary);border-radius:4px;transition:width .3s ease"></div>
+        </div>
+        <span id="bulk-progress-text" class="text-sm" style="min-width:120px;text-align:right;color:var(--text-muted)">0/0</span>
+      </div>
+      <div id="bulk-progress-log" class="text-sm" style="max-height:180px;overflow-y:auto;font-family:var(--font-mono);font-size:12px;line-height:1.6;color:var(--text-muted)"></div>
     </div>
     <!-- v2.0.57 Fix 5 — drought mode banner: shown only when every active
          account has weekly% < 5. Hidden by default; loadDrought() flips it. -->
@@ -3770,31 +3780,62 @@ docker compose up -d --force-recreate</pre>
   async refreshAllCredits() {
     this.toast(I18n.t('toast.credits.refreshing'), 'info');
     try {
-      const r = await this.api('POST', '/accounts/refresh-credits', {});
-      if (r.success) {
-        const okCount = (r.results || []).filter(x => x.ok).length;
-        const failCount = (r.results || []).length - okCount;
-        this.toast(I18n.t('toast.credits.allRefreshed', { ok: okCount, fail: failCount }));
-        this.loadAccounts();
-      } else {
-        this.toast(this.translateError(r.error, 'toast.credits.refreshFailed'), 'error');
-      }
+      await this.streamBulkAction('/accounts/refresh-credits/stream', 'btn-refresh-credits', I18n.t('action.refresh'));
+      this.loadAccounts();
     } catch (e) { this.toast(I18n.t('toast.credits.refreshFailed') + ': ' + e.message, 'error'); }
   },
 
   async probeAll() {
-    this.toast(I18n.t('toast.probe.allDoing'), 'info');
     try {
-      const r = await this.api('POST', '/accounts/probe-all', {});
-      if (r.success) {
-        const tierLabel = { pro: 'Pro', free: 'Free', expired: I18n.t('tier.expiredLabel'), unknown: I18n.t('tier.unknown') };
-        const summary = (r.results || []).map(x => `${x.email}: ${tierLabel[x.tier] || x.tier || x.error}`).join('; ');
-        this.toast(I18n.t('toast.probeAllComplete', { summary }));
-        this.loadAccounts();
-      } else {
-        this.toast(this.translateError(r.error, 'error.probeFailed'), 'error');
-      }
+      await this.streamBulkAction('/accounts/probe-all/stream', 'btn-probe-all', I18n.t('action.probe'));
+      this.loadAccounts();
     } catch (e) { this.toast(I18n.t('error.probeFailed') + ': ' + e.message, 'error'); }
+  },
+
+  async streamBulkAction(url, btnId, actionLabel) {
+    const btn = document.getElementById(btnId);
+    if (btn) { btn.disabled = true; btn.dataset.origHtml = btn.innerHTML; btn.innerHTML = '<span class="spinner"></span> ' + actionLabel + '...'; }
+    const container = document.getElementById('bulk-progress');
+    const bar = document.getElementById('bulk-progress-bar');
+    const text = document.getElementById('bulk-progress-text');
+    const log = document.getElementById('bulk-progress-log');
+    container.style.display = '';
+    bar.style.width = '0%';
+    bar.style.background = 'var(--primary)';
+    text.textContent = '...';
+    log.innerHTML = '';
+
+    return new Promise((resolve, reject) => {
+      const authSuffix = url.includes('?') ? '&' : '?pwd=' + encodeURIComponent(this.password || '');
+      const es = new EventSource('/dashboard/api' + url + authSuffix);
+      es.onmessage = (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          if (d.type === 'start') {
+            text.textContent = `0/${d.total}`;
+          } else if (d.type === 'progress') {
+            const pct = Math.round(((d.index + 1) / d.total) * 100);
+            bar.style.width = pct + '%';
+            const okLabel = d.tier ? `tier=${d.tier}` : (d.credits ? `${d.credits.percent ?? '?'}%` : '');
+            const line = d.error
+              ? `<div style="color:var(--error)">✗ ${this.esc(d.email)} — ${this.esc(d.error)}</div>`
+              : `<div style="color:var(--success)">✓ ${this.esc(d.email)} ${okLabel}</div>`;
+            log.insertAdjacentHTML('beforeend', line);
+            log.scrollTop = log.scrollHeight;
+            text.textContent = `${d.index + 1}/${d.total} (✓${d.ok} ✗${d.fail})`;
+          } else if (d.type === 'done') {
+            es.close();
+            bar.style.width = '100%';
+            bar.style.background = d.fail === 0 ? 'var(--success)' : 'var(--warning, #f59e0b)';
+            text.textContent = `${I18n.t('batch.complete') || '完成'} ✓${d.ok} ✗${d.fail}`;
+            if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset.origHtml; }
+            this.toast(`${actionLabel} ${I18n.t('batch.complete') || '完成'}: ✓${d.ok} ✗${d.fail}`, d.fail ? 'info' : 'success');
+            resolve();
+          }
+        } catch (err) { es.close(); reject(err); }
+      };
+      es.onerror = () => { es.close(); if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset.origHtml; } reject(new Error('stream error')); };
+    });
   },
 
   async probeAccount(id) {

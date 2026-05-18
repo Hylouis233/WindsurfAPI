@@ -321,11 +321,35 @@ export async function handleDashboardApi(method, subpath, body, req, res) {
   }
 
   // Auth check (except for auth verification endpoint)
-  if (subpath !== '/auth' && !checkAuth(req)) {
-    failedAuthAttempt(clientIp);
-    return json(res, 401, { error: 'Unauthorized. Set X-Dashboard-Password header.' });
+  // SSE stream endpoints also accept ?pwd= query param since EventSource
+  // cannot send custom headers.
+  const isStreamEndpoint = subpath.endsWith('/stream');
+  if (subpath !== '/auth') {
+    let authed = checkAuth(req);
+    if (!authed && isStreamEndpoint) {
+      const url = new URL(req.url, 'http://localhost');
+      const qpw = url.searchParams.get('pwd') || '';
+      if (qpw) {
+        const storedDashboardPw = getEffectiveDashboardPasswordStored();
+        if (storedDashboardPw) authed = verifyPassword(qpw, storedDashboardPw);
+        else if (isLocalBindHost()) {
+          const effectiveApiKey = getEffectiveApiKey();
+          if (effectiveApiKey) authed = safeEqualString(qpw, effectiveApiKey);
+          else authed = true;
+        }
+      }
+    }
+    if (!authed) {
+      failedAuthAttempt(clientIp);
+      if (isStreamEndpoint) {
+        res.writeHead(401, { 'Content-Type': 'text/plain' });
+        res.end('Unauthorized');
+        return;
+      }
+      return json(res, 401, { error: 'Unauthorized. Set X-Dashboard-Password header.' });
+    }
+    successfulAuthAttempt(clientIp);
   }
-  if (subpath !== '/auth') successfulAuthAttempt(clientIp);
 
   // ─── Auth ─────────────────────────────────────────────
   if (subpath === '/auth') {
@@ -696,7 +720,7 @@ export async function handleDashboardApi(method, subpath, body, req, res) {
     }
   }
 
-  // POST /accounts/probe-all — probe every active account
+  // POST /accounts/probe-all — probe every active account (returns all at once)
   if (subpath === '/accounts/probe-all' && method === 'POST') {
     const list = getAccountList().filter(a => a.status === 'active');
     const results = [];
@@ -711,6 +735,34 @@ export async function handleDashboardApi(method, subpath, body, req, res) {
     return json(res, 200, { success: true, results });
   }
 
+  // GET /accounts/probe-all/stream — SSE: probe each account and stream results
+  if (subpath === '/accounts/probe-all/stream' && method === 'GET') {
+    const list = getAccountList().filter(a => a.status === 'active');
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write(`data: ${JSON.stringify({ type: 'start', total: list.length })}\n\n`);
+    let ok = 0, fail = 0;
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      try {
+        const r = await probeAccount(a.id);
+        ok++;
+        res.write(`data: ${JSON.stringify({ type: 'progress', index: i, total: list.length, id: a.id, email: a.email, tier: r?.tier || 'unknown', ok, fail })}\n\n`);
+      } catch (err) {
+        fail++;
+        res.write(`data: ${JSON.stringify({ type: 'progress', index: i, total: list.length, id: a.id, email: a.email, error: err.message, ok, fail })}\n\n`);
+      }
+    }
+    res.write(`data: ${JSON.stringify({ type: 'done', total: list.length, ok, fail })}\n\n`);
+    res.end();
+    return;
+  }
+
   // POST /accounts/:id/probe — manually trigger capability probe
   const accountProbe = subpath.match(/^\/accounts\/([^/]+)\/probe$/);
   if (accountProbe && method === 'POST') {
@@ -723,10 +775,38 @@ export async function handleDashboardApi(method, subpath, body, req, res) {
     }
   }
 
-  // POST /accounts/refresh-credits — refresh every active account's balance
+  // POST /accounts/refresh-credits — refresh every active account's balance (batch)
   if (subpath === '/accounts/refresh-credits' && method === 'POST') {
     const results = await refreshAllCredits();
     return json(res, 200, { success: true, results });
+  }
+
+  // GET /accounts/refresh-credits/stream — SSE: refresh credits one by one
+  if (subpath === '/accounts/refresh-credits/stream' && method === 'GET') {
+    const list = getAccountList().filter(a => a.status === 'active');
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write(`data: ${JSON.stringify({ type: 'start', total: list.length })}\n\n`);
+    let ok = 0, fail = 0;
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      const r = await refreshCredits(a.id);
+      if (r.ok) {
+        ok++;
+        res.write(`data: ${JSON.stringify({ type: 'progress', index: i, total: list.length, id: a.id, email: a.email, credits: r.credits || null, ok, fail })}\n\n`);
+      } else {
+        fail++;
+        res.write(`data: ${JSON.stringify({ type: 'progress', index: i, total: list.length, id: a.id, email: a.email, error: r.error || 'unknown', ok, fail })}\n\n`);
+      }
+    }
+    res.write(`data: ${JSON.stringify({ type: 'done', total: list.length, ok, fail })}\n\n`);
+    res.end();
+    return;
   }
 
   // POST /accounts/:id/refresh-credits — single-account refresh
