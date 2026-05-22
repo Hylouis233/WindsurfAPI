@@ -1605,6 +1605,98 @@ export function getAccountCount() {
   };
 }
 
+export function getRateLimitSummary() {
+  const now = Date.now();
+  const activeAccounts = accounts.filter(a => a.status === 'active');
+  let globalLimitedAccountCount = 0;
+  let modelLimitedAccountCount = 0;
+  let limitedAccountCount = 0;
+  let modelLimitedEntries = 0;
+  let totalEverLimited = 0;
+  let soonestGlobalExpiryMs = Infinity;
+  let soonestModelExpiryMs = Infinity;
+  const limitedModels = new Map();
+
+  for (const a of activeAccounts) {
+    const hasGlobalLimit = a.rateLimitedUntil && a.rateLimitedUntil > now;
+    let hasModelLimits = false;
+    const everLimited = a.rateLimitedUntil > 0 || (a._modelRateLimits && Object.keys(a._modelRateLimits).length > 0);
+
+    if (hasGlobalLimit) {
+      globalLimitedAccountCount++;
+      soonestGlobalExpiryMs = Math.min(soonestGlobalExpiryMs, a.rateLimitedUntil - now);
+    }
+
+    if (a._modelRateLimits) {
+      for (const [model, until] of Object.entries(a._modelRateLimits)) {
+        if (!until) continue;
+        if (until <= now) {
+          delete a._modelRateLimits[model];
+          continue;
+        }
+        hasModelLimits = true;
+        modelLimitedEntries++;
+        soonestModelExpiryMs = Math.min(soonestModelExpiryMs, until - now);
+        const item = limitedModels.get(model) || {
+          model,
+          limitedAccounts: 0,
+          eligibleAccounts: 0,
+          soonestExpiryMs: Infinity,
+        };
+        item.limitedAccounts++;
+        item.soonestExpiryMs = Math.min(item.soonestExpiryMs, until - now);
+        limitedModels.set(model, item);
+      }
+    }
+
+    if (hasModelLimits) modelLimitedAccountCount++;
+    if (hasGlobalLimit || hasModelLimits) limitedAccountCount++;
+    if (everLimited) totalEverLimited++;
+  }
+
+  for (const item of limitedModels.values()) {
+    for (const a of activeAccounts) {
+      if (isModelAllowedForAccount(a, item.model)) {
+        item.eligibleAccounts++;
+      }
+    }
+  }
+
+  const topLimitedModels = Array.from(limitedModels.values())
+    .map(item => ({
+      ...item,
+      allLimited: item.eligibleAccounts > 0 && item.limitedAccounts >= item.eligibleAccounts,
+      soonestExpiryMs: item.soonestExpiryMs === Infinity ? 0 : Math.max(0, item.soonestExpiryMs),
+    }))
+    .sort((a, b) => {
+      if (a.allLimited !== b.allLimited) return a.allLimited ? -1 : 1;
+      return b.limitedAccounts - a.limitedAccounts;
+    })
+    .slice(0, 5);
+
+  const activeCount = activeAccounts.length;
+  const nonLimitedAccountCount = activeCount - limitedAccountCount;
+  const soonestExpiryMs = Math.min(soonestGlobalExpiryMs, soonestModelExpiryMs);
+
+  return {
+    activeLimited: limitedAccountCount,
+    limitedAccountCount,
+    globalLimitedAccountCount,
+    modelLimitedAccountCount,
+    modelLimitedEntries,
+    nonLimitedAccountCount,
+    totalEverLimited,
+    activeCount,
+    allLimited: activeCount > 0 && nonLimitedAccountCount === 0,
+    allAccountsLimited: activeCount > 0 && nonLimitedAccountCount === 0,
+    topLimitedModels,
+    allLimitedModelCount: topLimitedModels.filter(m => m.allLimited).length,
+    soonestExpiryMs: limitedAccountCount > 0 && soonestExpiryMs !== Infinity ? Math.max(0, soonestExpiryMs) : 0,
+    soonestGlobalExpiryMs: soonestGlobalExpiryMs === Infinity ? 0 : Math.max(0, soonestGlobalExpiryMs),
+    soonestModelExpiryMs: soonestModelExpiryMs === Infinity ? 0 : Math.max(0, soonestModelExpiryMs),
+  };
+}
+
 // ─── Incoming request API key validation ───────────────────
 
 export function configureBindHost(host) {

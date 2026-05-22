@@ -4,6 +4,7 @@ import {
   addAccountByKey,
   getAccountList,
   getApiKey,
+  getRateLimitSummary,
   getRpmStats,
   markRateLimited,
   releaseAccount,
@@ -12,6 +13,7 @@ import {
 } from '../src/auth.js';
 import { handleChatCompletions, rateLimitCooldownMs } from '../src/handlers/chat.js';
 import { getExperimental, setExperimental } from '../src/runtime-config.js';
+import { getRateLimitBurstSummary, recordRateLimitBurst, resetStats } from '../src/dashboard/stats.js';
 
 const createdAccountIds = [];
 const originalExperimental = getExperimental();
@@ -97,6 +99,48 @@ describe('rate-limit handling', () => {
 
     assert.ok(until >= now + 1000, `expected near-real expiry, got ${until - now}ms`);
     assert.ok(until <= now + 2500, `expected short cooldown, got ${until - now}ms`);
+  });
+
+  it('separates global account limits, model limits, and clean accounts for dashboard health', () => {
+    const globalAccount = addTestAccount('global-limited');
+    const modelAccount = addTestAccount('model-limited');
+    const cleanAccount = addTestAccount('clean');
+    const modelKey = 'gemini-2.5-flash';
+
+    markRateLimited(globalAccount.apiKey, 60_000);
+    markRateLimited(modelAccount.apiKey, 120_000, modelKey);
+
+    const summary = getRateLimitSummary();
+
+    assert.equal(summary.activeCount >= 3, true);
+    assert.equal(summary.globalLimitedAccountCount >= 1, true);
+    assert.equal(summary.modelLimitedAccountCount >= 1, true);
+    assert.equal(summary.modelLimitedEntries >= 1, true);
+    assert.equal(summary.nonLimitedAccountCount >= 1, true);
+    assert.equal(summary.allAccountsLimited, false);
+    assert.equal(summary.topLimitedModels.some(m => m.model === modelKey), true);
+    assert.equal(
+      getAccountList().find(a => a.id === cleanAccount.id).rateLimited,
+      false,
+    );
+  });
+
+  it('exposes short-lived IP burst cooldown separately from account/model limits', () => {
+    resetStats();
+
+    recordRateLimitBurst({
+      model: 'claude-sonnet-4.5',
+      count: 3,
+      cooldownMs: 30_000,
+      scope: 'ip',
+    });
+    const burst = getRateLimitBurstSummary();
+
+    assert.equal(burst.active, true);
+    assert.equal(burst.scope, 'ip');
+    assert.equal(burst.model, 'claude-sonnet-4.5');
+    assert.equal(burst.count, 3);
+    assert.ok(burst.remainingMs > 0);
   });
 
   it('returns 429 when every eligible account is locally RPM-exhausted', async () => {

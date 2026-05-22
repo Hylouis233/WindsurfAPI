@@ -10,7 +10,7 @@ import { isStickyEnabled, setStickyBinding } from '../account/sticky-session.js'
 import { resolveModel, getModelInfo, pickRateLimitFallback } from '../models.js';
 import { getLsFor, ensureLs } from '../langserver.js';
 import { config, log } from '../config.js';
-import { recordRequest, recordTokenUsage, recordPolicyBlocked, recordRateLimited } from '../dashboard/stats.js';
+import { recordRequest, recordTokenUsage, recordPolicyBlocked, recordRateLimited, recordRateLimitBurst } from '../dashboard/stats.js';
 import { extractIntentFromNarrative, detectToolIntentInNarrative } from './intent-extractor.js';
 import { markRequest as markQuietWindowRequest } from '../dashboard/quiet-window-updater.js';
 import { isModelAllowed } from '../dashboard/model-access.js';
@@ -2010,6 +2010,7 @@ async function _handleChatCompletionsInner(body, context = {}) {
       const sameModelBurst = context.__rateLimitEvents.filter(e => e.model === routingModelKey);
       if (sameModelBurst.length >= RL_BURST_THRESHOLD) {
         const maxCooldown = Math.max(...sameModelBurst.map(() => 30_000));
+        recordRateLimitBurst({ model: routingModelKey, count: sameModelBurst.length, cooldownMs: maxCooldown, scope: 'ip' });
         log.warn(`Chat[${reqId}]: IP-rate-limit burst detected — ${sameModelBurst.length} accounts rate-limited on ${displayModel} within ${RL_WINDOW_MS}ms. Short-circuiting.`);
         return {
           status: 429,
@@ -3273,6 +3274,7 @@ function streamResponse(id, created, model, modelKey, provider, messages, cascad
                 ctx.__rlAborted = true;
                 log.warn(`Chat[${reqId}] stream: IP-rate-limit burst — ${sameModelBurst.length} accounts rate-limited on ${model} within ${RL_WINDOW_MS}ms. Short-circuiting.`);
                 const cooldown = Math.max(...sameModelBurst.map(() => 30_000));
+                recordRateLimitBurst({ model: modelKey, count: sameModelBurst.length, cooldownMs: cooldown, scope: 'ip' });
                 lastErr = Object.assign(new Error(`All accounts temporarily rate-limited on ${model}. Windsurf upstream is applying IP-level cooldown. Wait ~${Math.ceil(cooldown / 1000)}s before retrying.`), { type: 'rate_limit_exceeded', retry_after_ms: cooldown });
                 break;
               }

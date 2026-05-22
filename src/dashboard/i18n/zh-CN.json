@@ -3,11 +3,9 @@
     "name": "简体中文",
     "code": "zh-CN"
   },
-
   "brand": {
     "sub": "管理控制台"
   },
-
   "nav": {
     "group": {
       "overview": "概览",
@@ -26,11 +24,9 @@
     "experimental": "实验性功能",
     "credits": "致谢"
   },
-
   "pageTitle": {
     "main": "WindsurfAPI bydwgx1337 控制台"
   },
-
   "page": {
     "overview": "仪表盘",
     "stats": "统计分析",
@@ -43,7 +39,6 @@
     "experimental": "实验性功能",
     "credits": "致谢"
   },
-
   "pageSubtitle": {
     "overview": "系统运行状态与关键指标概览",
     "windsurf-login": "支持 Google / GitHub / 邮箱密码 三种方式登录 Windsurf 获取 API Key",
@@ -56,7 +51,6 @@
     "experimental": "尚未稳定的优化项；如果发现异常可以随时关闭",
     "credits": "感谢以下朋友为项目提交 PR / 审计代码 / 修复问题"
   },
-
   "button": {
     "cancel": "取消",
     "confirm": "确认",
@@ -65,7 +59,6 @@
     "restart": "重启",
     "updateAndRestart": "更新并重启"
   },
-
   "action": {
     "checkUpdate": "检查更新",
     "applyUpdate": "一键更新并重启",
@@ -100,9 +93,10 @@
     "invert": "反选",
     "showPassword": "显示/隐藏密码",
     "revealKey": "点击显示并复制完整 API Key",
-    "importLocal": "从本地 Windsurf 导入"
+    "importLocal": "从本地 Windsurf 导入",
+    "disableRateLimited": "禁用限流账号",
+    "disableRateLimitedTitle": "一键禁用所有被限流的账号"
   },
-
   "status": {
     "active": "正常",
     "disabled": "已禁用",
@@ -146,7 +140,6 @@
     "fetchFailed": "获取失败",
     "clickToEditTier": "点击手动修改层级（探测异常时用）"
   },
-
   "tier": {
     "pro": "PRO",
     "free": "FREE",
@@ -154,7 +147,6 @@
     "unknown": "未知",
     "expiredLabel": "已过期"
   },
-
   "creditsBar": {
     "daily": "每日配额",
     "weekly": "每周配额",
@@ -173,7 +165,6 @@
     "promptNA": "该账号无提示词额度数据",
     "noResetTime": "重置时间未知"
   },
-
   "section": {
     "banStatus": {
       "title": "健康状态"
@@ -314,19 +305,16 @@
       "desc": "前 8 个模型的请求量占比"
     }
   },
-
   "help": {
     "token": "推荐用 Token 方式添加账号 点 {{link}} 登录后复制 Token 粘贴到下面就行 所有登录方式（邮箱/Google/GitHub）都能用",
     "tokenGuide": "推荐用 Token 方式添加账号 点 ",
     "tokenGuideEnd": " 登录后复制 Token 粘贴到下面就行 所有登录方式（邮箱/Google/GitHub）都能用"
   },
-
   "skin": {
     "modern": "默认现代风",
     "sketch": "手绘草稿风（实验）",
     "hint": "选择后立即写入 cookie 并刷新"
   },
-
   "field": {
     "email": {
       "label": "邮箱",
@@ -415,7 +403,6 @@
     "autoScroll": "自动滚动",
     "autoAdd": "登录成功自动加入账号池"
   },
-
   "table": {
     "header": {
       "time": "时间",
@@ -462,7 +449,6 @@
       "credits": "加载中…"
     }
   },
-
   "card": {
     "activeAccounts": {
       "title": "活跃账号",
@@ -506,6 +492,9 @@
     "rateLimit": {
       "title": "限流中",
       "badge": "限流中",
+      "globalBadge": "全局限流",
+      "modelBadge": "模型限流 {{count}}",
+      "modelList": "模型限流",
       "subtitle": "暂时不参与调度"
     },
     "stats": {
@@ -539,9 +528,32 @@
     "defaultInstance": "默认实例",
     "noProxy": "无代理",
     "restarts": "重启",
-    "custom": "已自定义"
+    "custom": "已自定义",
+    "ipRateLimit": {
+      "title": "IP 限流状态",
+      "normal": "正常",
+      "limited": "已限流",
+      "allLimited": "全部限流",
+      "subtitle": "{{limited}}/{{active}} 个账号受限 · {{count}} 次限流",
+      "subtitleAll": "所有账号均被限流 · {{count}} 次累计",
+      "expiresIn": "最快 {{sec}} 秒后恢复",
+      "banner": "上游 IP 限流中：所有 {{count}} 个账号均受影响，请求可能失败"
+    },
+    "rateLimitHealth": {
+      "title": "限流健康",
+      "normal": "正常",
+      "limited": "部分限流",
+      "modelLimited": "模型限流",
+      "ipCooldown": "IP 冷却",
+      "noCleanAccounts": "无非限流号",
+      "subtitle": "干净 {{clean}}/{{active}} · 全局 {{global}} · 模型账号 {{modelAccounts}} · 模型项 {{modelEntries}} · 事件 {{count}}",
+      "topModel": "{{model}}：{{limited}}/{{eligible}} 个可用账号受限",
+      "expiresIn": "最快 {{sec}} 秒后恢复",
+      "ipBanner": "疑似上游/IP 限流：{{model}} 在短时间内触发 {{count}} 个账号限流，约 {{sec}} 秒后重试",
+      "noCleanBanner": "当前无非限流号：{{active}} 个活跃账号均处于全局或模型限流状态，请及时补号",
+      "modelBanner": "模型 {{model}} 当前无可用非限流账号（{{limited}}/{{eligible}}），请切换模型或补号"
+    }
   },
-
   "login": {
     "title": "控制台登录",
     "subtitle": "请输入管理密码以继续",
@@ -557,7 +569,6 @@
     "locked": "后端未配置密码：请在服务端设置 DASHBOARD_PASSWORD 或 API_KEY 环境变量并重启",
     "networkError": "无法连接服务器"
   },
-
   "range": {
     "6h": "6小时",
     "24h": "24小时",
@@ -573,7 +584,6 @@
     "customCancel": "取消",
     "customHint": "最多显示最近 30 天数据"
   },
-
   "credits": {
     "contributors": "核心贡献者",
     "history": "贡献历史 · {{count}} 项",
@@ -585,7 +595,6 @@
       "pr": "提 PR"
     }
   },
-
   "experimental": {
     "enable": "启用",
     "disable": "禁用",
@@ -614,12 +623,10 @@
     "missingPlaceholderDesc": "保存后该厂商的模型名将无法被替换进提示词。确定继续？",
     "restored": "已恢复"
   },
-
   "drought": {
     "title": "配额预警：",
     "body": "所有账号本周配额都低于阈值，建议补账号或等待重置"
   },
-
   "credentials": {
     "apiKey": "API_KEY",
     "dashboardPassword": "Dashboard 密码",
@@ -636,7 +643,6 @@
     "confirmSave": "改完之后旧值立即失效，要继续吗？",
     "confirmClear": "清除运行时覆盖，回退 .env 值？"
   },
-
   "confirm": {
     "restartTitle": "重启 Language Server",
     "restartDesc": "进行中的请求将会失败，确定要继续吗？",
@@ -646,7 +652,6 @@
     "restoreDefaultDesc": "恢复到默认？",
     "clearPoolDesc": "当前所有进行中的 Cascade 会话都将被清除，确定继续吗？"
   },
-
   "modal": {
     "blockedModels": {
       "title": "编辑可用模型 — {{email}}",
@@ -691,7 +696,6 @@
       "desc": "为账号 {{label}} 设置独立代理"
     }
   },
-
   "oauth": {
     "tryAnotherWay": "换个方式试试",
     "google": "Google 登录",
@@ -714,7 +718,6 @@
       "loginFailed": "{{label}} 登录失败: {{error}}"
     }
   },
-
   "update": {
     "checking": "正在检查更新...",
     "newVersion": "发现新版本",
@@ -729,7 +732,6 @@
     "notGitDesc": "如果你用 git clone 部署的 需要确保 .git 目录和 WindsurfAPI 源代码目录在一起。SFTP / 压缩包上传的部署请手动替换文件后 pm2 重启",
     "upToDate": "已是最新，无需更新"
   },
-
   "proxy": {
     "test": {
       "button": "测试代理",
@@ -744,7 +746,6 @@
     "placeholderPassword": "代理认证密码",
     "auth": "认证"
   },
-
   "localImport": {
     "scanning": "正在扫描本地 Windsurf 客户端…",
     "empty": "没找到已登录的本地 Windsurf 凭证",
@@ -758,7 +759,6 @@
     "importSuccess": "已导入 {{email}}",
     "unavailable": "此功能仅在 localhost 部署可用 — 远端服务器上的 \"本地 Windsurf\" 是别人电脑上的，不是你电脑里的。"
   },
-
   "account": {
     "addSuccess": "账号已添加",
     "deleteSuccess": "账号已删除",
@@ -767,6 +767,9 @@
     "resetErrors": "错误已重置",
     "tierSet": "层级已设为 {{tier}}",
     "editModels": "编辑可用模型",
+    "noRateLimitedActive": "没有处于限流状态的账号",
+    "disableRateLimitedTitle": "禁用 {{count}} 个限流账号",
+    "disableRateLimitedDone": "已禁用 {{count}} 个限流账号",
     "probe": {
       "doing": "探测中，约需 10-30 秒...",
       "complete": "探测完成：{{result}}",
@@ -829,7 +832,6 @@
       }
     }
   },
-
   "batch": {
     "pasteFirst": "请先粘贴批量账号",
     "importing": "导入中...",
@@ -842,7 +844,6 @@
     "duplicate": "重复",
     "formatError": "第 {{line}} 行格式错误"
   },
-
   "quietWindow": {
     "status": {
       "disabled": "已关闭",
@@ -857,7 +858,6 @@
     "triggered": "已触发",
     "triggerFailed": "触发失败"
   },
-
   "toast": {
     "copied": "已复制",
     "saved": "已保存",
@@ -918,7 +918,6 @@
       "allRefreshed": "余额刷新完成：{{ok}} 成功 / {{fail}} 失败"
     }
   },
-
   "log": {
     "level": {
       "all": "所有级别",
@@ -938,7 +937,6 @@
       "btn": "下载日志"
     }
   },
-
   "model": {
     "mode": {
       "all": "全部允许",
@@ -961,7 +959,6 @@
       "empty": "清单为空"
     }
   },
-
   "error": {
     "generic": "发生错误",
     "unknown": "未知错误",
@@ -1014,21 +1011,19 @@
     "ERR_POSTAUTH_FAILED": "Windsurf PostAuth 失败",
     "ERR_TOKEN_FETCH_FAILED": "获取一次性 Auth Token 失败",
     "ERR_FIREBASE_TOKEN_MISSING": "Firebase 回应缺少 idToken",
+    "ERR_DUPLICATE_ACCOUNT": "账号已重复",
     "ERR_LOCAL_IMPORT_LOOPBACK_ONLY": "本地导入仅限 127.0.0.1 访问 — 请在部署服务器本机的浏览器里打开 dashboard，不要用公网域名",
     "ERR_LOCAL_IMPORT_FAILED": "扫描本地 Windsurf 凭证失败"
   },
-
   "footer": {
     "version": "版本",
     "langToggle": "切换语言",
     "langToggleToEn": "Switch to English",
     "langToggleToZh": "切换到中文"
   },
-
   "placeholder": {
     "noProxy": "无代理"
   },
-
   "loginResult": {
     "success": "✓ 登录成功",
     "apiKeyGenerated": "API Key 已生成{{autoAdd}}",
@@ -1046,20 +1041,17 @@
     "successTitle": "登录成功",
     "addedToPool": "并加入账号池"
   },
-
   "timeRange": {
     "minutesAgo": "{{count}}分钟前",
     "hoursAgo": "{{count}}小时前",
     "daysAgo": "{{count}}天前"
   },
-
   "time": {
     "day": "天",
     "hour": "时",
     "minute": "分",
     "second": "秒"
   },
-
   "prompt": {
     "editor": {
       "reset": "重置",
@@ -1067,7 +1059,6 @@
       "templateHint": "{{model}} 占位符会被替换成请求的模型名。"
     }
   },
-
   "ls": {
     "defaultInstance": "默认实例",
     "noProxy": "无代理",

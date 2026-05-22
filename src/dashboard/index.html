@@ -1579,6 +1579,10 @@ window._firebaseOAuth = async function(provider) {
       </div>
     </div>
     <div id="update-status" class="section hidden" style="padding:12px;margin-bottom:12px"></div>
+    <div id="rate-limit-banner" class="hidden" style="background:var(--error-bg,#fef2f2);border:1px solid var(--error,#ef4444);border-radius:8px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+      <svg style="flex-shrink:0;width:20px;height:20px;color:var(--error,#ef4444)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span id="rate-limit-banner-text" style="color:var(--error,#ef4444);font-size:13px;font-weight:500"></span>
+    </div>
     <div class="metrics-grid" id="overview-cards"></div>
     <div class="section">
       <div class="section-header">
@@ -1767,9 +1771,9 @@ window._firebaseOAuth = async function(provider) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <span data-i18n="action.probe">全部探测</span>
         </button>
-        <button class="btn btn-outline" onclick="App.disableRateLimited()" id="btn-disable-rl" title="一键禁用所有被限流的账号">
+        <button class="btn btn-outline" onclick="App.disableRateLimited()" id="btn-disable-rl" data-i18n-title="action.disableRateLimitedTitle" title="Disable all currently rate-limited accounts">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-          <span>禁用限流账号</span>
+          <span data-i18n="action.disableRateLimited">Disable rate-limited accounts</span>
         </button>
       </div>
     </div>
@@ -2930,6 +2934,22 @@ docker compose up -d --force-recreate</pre>
     const uptime = d.uptime ? this.fmtDuration(d.uptime) : '-';
     const ls = d.langServer || {};
     const poolCount = (ls.instances || []).length || (ls.running ? 1 : 0);
+    const rl = d.rateLimit || {};
+    const ipCooldown = rl.ipCooldown || {};
+    const topLimitedModel = (rl.topLimitedModels || [])[0] || null;
+    const rateCardKind = ipCooldown.active || rl.allAccountsLimited
+      ? 'error'
+      : (rl.allLimitedModelCount > 0 || (rl.limitedAccountCount || 0) > 0 ? 'warn' : 'success');
+    const rateCardValue = ipCooldown.active
+      ? I18n.t('card.rateLimitHealth.ipCooldown')
+      : rl.allAccountsLimited
+        ? I18n.t('card.rateLimitHealth.noCleanAccounts')
+        : rl.allLimitedModelCount > 0
+          ? I18n.t('card.rateLimitHealth.modelLimited')
+          : (rl.limitedAccountCount || 0) > 0
+            ? I18n.t('card.rateLimitHealth.limited')
+            : I18n.t('card.rateLimitHealth.normal');
+    const rateExpiryMs = ipCooldown.active ? ipCooldown.remainingMs : (rl.soonestExpiryMs || 0);
     document.getElementById('overview-cards').innerHTML = `
       <div class="card success">
         <div class="card-header"><div class="card-title">${I18n.t('card.activeAccounts.title')}</div>
@@ -2966,7 +2986,53 @@ docker compose up -d --force-recreate</pre>
         <div class="card-value">${d.cache?.hitRate || '0.0'}%</div>
         <div class="card-sub">${I18n.t('card.responseCache.subtitle', { hits: d.cache?.hits || 0, misses: d.cache?.misses || 0, size: d.cache?.size || 0, max: d.cache?.maxSize || 0 })}</div>
       </div>
+      <div class="card ${rateCardKind}">
+        <div class="card-header"><div class="card-title">${I18n.t('card.rateLimitHealth.title')}</div>
+          <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+        </div>
+        <div class="card-value" style="font-size:18px">${rateCardValue}</div>
+        <div class="card-sub">${I18n.t('card.rateLimitHealth.subtitle', {
+          clean: rl.nonLimitedAccountCount || 0,
+          active: rl.activeCount || 0,
+          global: rl.globalLimitedAccountCount || 0,
+          modelAccounts: rl.modelLimitedAccountCount || 0,
+          modelEntries: rl.modelLimitedEntries || 0,
+          count: rl.rateLimitedCount || 0,
+        })}</div>
+        ${topLimitedModel ? `<div class="card-sub" style="margin-top:2px">${I18n.t('card.rateLimitHealth.topModel', { model: topLimitedModel.model, limited: topLimitedModel.limitedAccounts || 0, eligible: topLimitedModel.eligibleAccounts || 0 })}</div>` : ''}
+        ${(rateExpiryMs > 0)
+          ? `<div class="card-sub" style="margin-top:2px">${I18n.t('card.rateLimitHealth.expiresIn', { sec: Math.ceil(rateExpiryMs / 1000) })}</div>` : ''}
+      </div>
     `;
+    // Show/hide rate limit warning banner
+    const banner = document.getElementById('rate-limit-banner');
+    const bannerText = document.getElementById('rate-limit-banner-text');
+    if (banner && bannerText) {
+      if (ipCooldown.active) {
+        banner.classList.remove('hidden');
+        banner.style.display = 'flex';
+        bannerText.textContent = I18n.t('card.rateLimitHealth.ipBanner', {
+          model: ipCooldown.model || '-',
+          count: ipCooldown.count || 0,
+          sec: Math.ceil((ipCooldown.remainingMs || 0) / 1000),
+        });
+      } else if (rl.allAccountsLimited) {
+        banner.classList.remove('hidden');
+        banner.style.display = 'flex';
+        bannerText.textContent = I18n.t('card.rateLimitHealth.noCleanBanner', { active: rl.activeCount || 0 });
+      } else if (topLimitedModel?.allLimited) {
+        banner.classList.remove('hidden');
+        banner.style.display = 'flex';
+        bannerText.textContent = I18n.t('card.rateLimitHealth.modelBanner', {
+          model: topLimitedModel.model,
+          limited: topLimitedModel.limitedAccounts || 0,
+          eligible: topLimitedModel.eligibleAccounts || 0,
+        });
+      } else {
+        banner.classList.add('hidden');
+        banner.style.display = 'none';
+      }
+    }
     const instances = ls.instances || [];
     if (instances.length > 0) {
       document.getElementById('ls-status').innerHTML = `
@@ -3502,10 +3568,12 @@ docker compose up -d --force-recreate</pre>
              ${blockedCount > 0 ? `<span class="badge warn" style="margin-left:4px">-${blockedCount}</span>` : ''}
            </button>`
         : `<span class="text-xs text-dim">-</span>`;
-      const rateLimitBadge = a.rateLimited ? ` <span class="badge warn">${I18n.t('card.rateLimit.badge')}</span>` : '';
       const hasModelLimits = a.modelRateLimits && Object.keys(a.modelRateLimits).length > 0;
-      const everRateLimited = a.rateLimited || hasModelLimits || (a.rateLimitedUntil && a.rateLimitedUntil > 0);
-      const rateLimitTag = everRateLimited ? `<span class="badge warn" style="margin-left:4px;font-size:10px">限流</span>` : '';
+      const modelLimitKeys = Object.keys(a.modelRateLimits || {});
+      const rateLimitBadges = [
+        a.rateLimited ? `<span class="badge warn">${I18n.t('card.rateLimit.globalBadge')}</span>` : '',
+        hasModelLimits ? `<span class="badge warn">${I18n.t('card.rateLimit.modelBadge', { count: modelLimitKeys.length })}</span>` : '',
+      ].filter(Boolean).join(' ');
       const rpmUsed = a.rpmUsed ?? 0;
       const rpmLimit = a.rpmLimit ?? 0;
       const rpmPct = rpmLimit > 0 ? Math.min(100, Math.round((rpmUsed / rpmLimit) * 100)) : 0;
@@ -3583,7 +3651,7 @@ docker compose up -d --force-recreate</pre>
         <td>${rpmCell}</td>
         <td>${creditCell}</td>
         <td>${capsHtml}</td>
-        <td><span class="badge ${a.status}">${a.status}</span>${rateLimitBadge}</td>
+        <td><span class="badge ${a.status}">${a.status}</span>${rateLimitBadges ? ' ' + rateLimitBadges : ''}</td>
         <td style="color:${a.errorCount > 0 ? 'var(--error)' : 'inherit'}">${a.errorCount}</td>
         <td class="text-sm nowrap">${a.lastUsed ? new Date(a.lastUsed).toLocaleString() : '-'}</td>
         <td class="nowrap">
@@ -3752,9 +3820,10 @@ docker compose up -d --force-recreate</pre>
           <div class="detail-card-head"><span class="dot" style="background:var(--info);box-shadow:0 0 6px var(--info)"></span>${T('runtime.title')}</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px">
             <div class="detail-kv">
-              <span class="k">${T('runtime.status')}</span><span class="v"><span class="badge ${a.status}">${a.status}</span>${a.rateLimited ? ` <span class="badge warn">${I18n.t('card.rateLimit.badge')}</span>` : ''}</span>
+              <span class="k">${T('runtime.status')}</span><span class="v"><span class="badge ${a.status}">${a.status}</span>${rateLimitBadges ? ' ' + rateLimitBadges : ''}</span>
               <span class="k">${T('runtime.errors')}</span><span class="v" style="color:${a.errorCount > 0 ? 'var(--error)' : 'inherit'}">${a.errorCount || 0}</span>
               <span class="k">${T('runtime.rpm')}</span><span class="v">${a.rpmUsed ?? 0} / ${a.rpmLimit ?? 0}</span>
+              ${modelLimitKeys.length ? `<span class="k">${I18n.t('card.rateLimit.modelList')}</span><span class="v" style="font-size:11px">${this.esc(modelLimitKeys.slice(0, 5).join(', '))}${modelLimitKeys.length > 5 ? '…' : ''}</span>` : ''}
             </div>
             <div class="detail-kv">
               <span class="k">${T('runtime.lastUsed')}</span><span class="v">${fmtAgo(a.lastUsed)}</span>
@@ -3834,9 +3903,9 @@ docker compose up -d --force-recreate</pre>
             es.close();
             bar.style.width = '100%';
             bar.style.background = d.fail === 0 ? 'var(--success)' : 'var(--warning, #f59e0b)';
-            text.textContent = `${I18n.t('batch.complete') || '完成'} ✓${d.ok} ✗${d.fail}`;
+            text.textContent = `${I18n.t('batch.complete')} ✓${d.ok} ✗${d.fail}`;
             if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset.origHtml; }
-            this.toast(`${actionLabel} ${I18n.t('batch.complete') || '完成'}: ✓${d.ok} ✗${d.fail}`, d.fail ? 'info' : 'success');
+            this.toast(`${actionLabel} ${I18n.t('batch.complete')}: ✓${d.ok} ✗${d.fail}`, d.fail ? 'info' : 'success');
             resolve();
           }
         } catch (err) { es.close(); reject(err); }
@@ -4151,9 +4220,9 @@ docker compose up -d --force-recreate</pre>
       const hasModelLimits = a.modelRateLimits && Object.keys(a.modelRateLimits).length > 0;
       return hasLimit || hasModelLimits;
     });
-    if (!accts.length) { this.toast('没有处于限流状态的账号', 'info'); return; }
+    if (!accts.length) { this.toast(I18n.t('account.noRateLimitedActive'), 'info'); return; }
     const confirmed = await this.confirm(
-      `禁用 ${accts.length} 个限流账号`,
+      I18n.t('account.disableRateLimitedTitle', { count: accts.length }),
       accts.map(a => a.email).join('<br>'),
       { html: true }
     );
@@ -4163,7 +4232,7 @@ docker compose up -d --force-recreate</pre>
       await this.api('PATCH', `/accounts/${a.id}`, { status: 'disabled' });
       ok++;
     }
-    this.toast(`已禁用 ${ok} 个限流账号`, 'success');
+    this.toast(I18n.t('account.disableRateLimitedDone', { count: ok }), 'success');
     this.loadAccounts();
   },
 

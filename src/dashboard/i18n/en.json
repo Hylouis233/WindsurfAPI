@@ -3,11 +3,9 @@
     "name": "English",
     "code": "en"
   },
-
   "brand": {
     "sub": "Control Panel"
   },
-
   "nav": {
     "group": {
       "overview": "Overview",
@@ -26,7 +24,6 @@
     "experimental": "Experimental",
     "credits": "Credits"
   },
-
   "page": {
     "overview": "Dashboard",
     "stats": "Statistics",
@@ -39,11 +36,9 @@
     "experimental": "Experimental Features",
     "credits": "Credits"
   },
-
   "pageTitle": {
     "main": "WindsurfAPI bydwgx1337 Control Panel"
   },
-
   "pageSubtitle": {
     "overview": "System status and key metrics overview",
     "windsurf-login": "Login to Windsurf via Google / GitHub / Email to get API Key",
@@ -56,7 +51,6 @@
     "experimental": "Unstable optimizations; disable anytime if issues occur",
     "credits": "Thanks to contributors who submitted PRs / audited code / reported issues"
   },
-
   "button": {
     "cancel": "Cancel",
     "confirm": "Confirm",
@@ -65,7 +59,6 @@
     "restart": "Restart",
     "updateAndRestart": "Update and Restart"
   },
-
   "action": {
     "checkUpdate": "Check Update",
     "applyUpdate": "Update & Restart",
@@ -100,9 +93,10 @@
     "invert": "Invert",
     "showPassword": "Show/Hide Password",
     "revealKey": "Click to reveal and copy full API key",
-    "importLocal": "Import from local Windsurf"
+    "importLocal": "Import from local Windsurf",
+    "disableRateLimited": "Disable rate-limited accounts",
+    "disableRateLimitedTitle": "Disable every currently rate-limited account"
   },
-
   "status": {
     "active": "Active",
     "disabled": "Disabled",
@@ -146,7 +140,6 @@
     "fetchFailed": "Fetch failed",
     "clickToEditTier": "Click to manually edit tier (use when probe fails)"
   },
-
   "tier": {
     "pro": "PRO",
     "free": "FREE",
@@ -154,7 +147,6 @@
     "unknown": "Unknown",
     "expiredLabel": "Expired"
   },
-
   "creditsBar": {
     "daily": "Daily Quota",
     "weekly": "Weekly Quota",
@@ -173,7 +165,6 @@
     "promptNA": "No prompt-credit data for this account",
     "noResetTime": "reset time unknown"
   },
-
   "section": {
     "banStatus": {
       "title": "Health Status"
@@ -314,19 +305,16 @@
       "desc": "Share of requests for top 8 models"
     }
   },
-
   "help": {
     "token": "Recommended: Use Token method. Visit {{link}} after logging in, copy the Token and paste below. Works with all login methods (Email/Google/GitHub).",
     "tokenGuide": "Recommended: Use Token method. Visit ",
     "tokenGuideEnd": " after logging in, copy the Token and paste below. Works with all login methods (Email/Google/GitHub)."
   },
-
   "skin": {
     "modern": "Modern",
     "sketch": "Sketch (Experimental)",
     "hint": "Saved to cookie and refreshed immediately"
   },
-
   "field": {
     "email": {
       "label": "Email",
@@ -415,7 +403,6 @@
     "autoScroll": "Auto-scroll",
     "autoAdd": "Auto-add to pool after login"
   },
-
   "table": {
     "header": {
       "time": "Time",
@@ -462,7 +449,6 @@
       "noData": "No data"
     }
   },
-
   "card": {
     "activeAccounts": {
       "title": "Active Accounts",
@@ -506,6 +492,9 @@
     "rateLimit": {
       "title": "Rate Limited",
       "badge": "Rate Limited",
+      "globalBadge": "Global Limit",
+      "modelBadge": "Model Limit {{count}}",
+      "modelList": "Model Limits",
       "subtitle": "Temporarily excluded from scheduling"
     },
     "stats": {
@@ -539,9 +528,32 @@
     "defaultInstance": "Default Instance",
     "noProxy": "No proxy",
     "restarts": "restarts",
-    "custom": "Customized"
+    "custom": "Customized",
+    "ipRateLimit": {
+      "title": "IP Rate Limit",
+      "normal": "Normal",
+      "limited": "Limited",
+      "allLimited": "All Limited",
+      "subtitle": "{{limited}}/{{active}} accounts limited · {{count}} total events",
+      "subtitleAll": "All accounts limited · {{count}} total events",
+      "expiresIn": "Recovers in {{sec}}s",
+      "banner": "Upstream IP rate limiting: all {{count}} accounts affected, requests may fail"
+    },
+    "rateLimitHealth": {
+      "title": "Rate Limit Health",
+      "normal": "Normal",
+      "limited": "Partially Limited",
+      "modelLimited": "Model Limited",
+      "ipCooldown": "IP Cooldown",
+      "noCleanAccounts": "No Clean Accounts",
+      "subtitle": "Clean {{clean}}/{{active}} · global {{global}} · model accounts {{modelAccounts}} · model entries {{modelEntries}} · events {{count}}",
+      "topModel": "{{model}}: {{limited}}/{{eligible}} eligible accounts limited",
+      "expiresIn": "Recovers in {{sec}}s",
+      "ipBanner": "Likely upstream/IP cooldown: {{model}} hit {{count}} account rate limits in a short window. Retry in about {{sec}}s",
+      "noCleanBanner": "No clean Windsurf accounts: all {{active}} active accounts are globally or model limited. Add more accounts soon",
+      "modelBanner": "Model {{model}} has no non-limited eligible account ({{limited}}/{{eligible}}). Switch models or add accounts"
+    }
   },
-
   "login": {
     "title": "Control Panel Login",
     "subtitle": "Please enter the admin password to continue",
@@ -557,7 +569,6 @@
     "locked": "Backend has no password configured — set DASHBOARD_PASSWORD or API_KEY env and restart",
     "networkError": "Cannot reach server"
   },
-
   "range": {
     "6h": "6h",
     "24h": "24h",
@@ -573,7 +584,6 @@
     "customCancel": "Cancel",
     "customHint": "Showing up to last 30 days"
   },
-
   "credits": {
     "contributors": "Core Contributors",
     "history": "Contributions · {{count}}",
@@ -585,7 +595,6 @@
       "pr": "Open PR"
     }
   },
-
   "experimental": {
     "enable": "Enable",
     "disable": "Disable",
@@ -614,12 +623,10 @@
     "missingPlaceholderDesc": "After saving, the provider's model name won't be replaced in the prompt. Continue?",
     "restored": "restored"
   },
-
   "drought": {
     "title": "Quota drought:",
     "body": "Every active account is below the weekly quota threshold — add accounts or wait for reset"
   },
-
   "credentials": {
     "apiKey": "API_KEY",
     "dashboardPassword": "Dashboard Password",
@@ -636,7 +643,6 @@
     "confirmSave": "After saving, the old value stops working immediately. Continue?",
     "confirmClear": "Clear the runtime override and fall back to the .env value?"
   },
-
   "confirm": {
     "restartTitle": "Restart Language Server",
     "restartDesc": "In-progress requests will fail. Continue?",
@@ -646,7 +652,6 @@
     "restoreDefaultDesc": "restore to default?",
     "clearPoolDesc": "All active Cascade sessions will be cleared. Continue?"
   },
-
   "modal": {
     "blockedModels": {
       "title": "Edit Available Models — {{email}}",
@@ -691,7 +696,6 @@
       "desc": "Set dedicated proxy for account {{label}}"
     }
   },
-
   "oauth": {
     "tryAnotherWay": "Try Another Way",
     "google": "Google Login",
@@ -714,7 +718,6 @@
       "loginFailed": "{{label}} login failed: {{error}}"
     }
   },
-
   "update": {
     "checking": "Checking for updates...",
     "newVersion": "New version found",
@@ -729,7 +732,6 @@
     "notGitDesc": "If you deployed via git clone, ensure .git directory is with WindsurfAPI source. For SFTP / zip uploads, manually replace files and pm2 restart.",
     "upToDate": "Already up to date, no update needed"
   },
-
   "proxy": {
     "test": {
       "button": "Test Proxy",
@@ -744,7 +746,6 @@
     "placeholderPassword": "Proxy auth password",
     "auth": "Auth"
   },
-
   "localImport": {
     "scanning": "Scanning local Windsurf client…",
     "empty": "No logged-in local Windsurf credentials found",
@@ -758,7 +759,6 @@
     "importSuccess": "Imported {{email}}",
     "unavailable": "Available only on localhost deployments — \"local Windsurf\" on a remote server belongs to someone else's machine, not yours."
   },
-
   "account": {
     "addSuccess": "Account added",
     "deleteSuccess": "Account deleted",
@@ -767,6 +767,9 @@
     "resetErrors": "Errors reset",
     "tierSet": "Tier set to {{tier}}",
     "editModels": "Edit available models",
+    "noRateLimitedActive": "No active account is currently rate limited",
+    "disableRateLimitedTitle": "Disable {{count}} rate-limited accounts",
+    "disableRateLimitedDone": "Disabled {{count}} rate-limited accounts",
     "probe": {
       "doing": "Probing, takes about 10-30 seconds...",
       "complete": "Probe complete: {{result}}",
@@ -829,7 +832,6 @@
       }
     }
   },
-
   "batch": {
     "pasteFirst": "Please paste batch accounts first",
     "importing": "Importing...",
@@ -842,7 +844,6 @@
     "duplicate": "Duplicate",
     "formatError": "Line {{line}} format error"
   },
-
   "quietWindow": {
     "status": {
       "disabled": "disabled",
@@ -857,7 +858,6 @@
     "triggered": "triggered",
     "triggerFailed": "trigger failed"
   },
-
   "toast": {
     "copied": "Copied",
     "saved": "Saved",
@@ -918,7 +918,6 @@
       "allRefreshed": "All account credits refreshed: {{ok}} success / {{fail}} failed"
     }
   },
-
   "log": {
     "level": {
       "all": "All Levels",
@@ -938,7 +937,6 @@
       "btn": "Download logs"
     }
   },
-
   "model": {
     "mode": {
       "all": "Allow All",
@@ -961,7 +959,6 @@
       "empty": "List is empty"
     }
   },
-
   "error": {
     "generic": "An error occurred",
     "unknown": "Unknown error",
@@ -1014,21 +1011,19 @@
     "ERR_POSTAUTH_FAILED": "Windsurf PostAuth failed",
     "ERR_TOKEN_FETCH_FAILED": "Failed to fetch one-time auth token",
     "ERR_FIREBASE_TOKEN_MISSING": "Firebase response missing idToken",
+    "ERR_DUPLICATE_ACCOUNT": "Account already exists",
     "ERR_LOCAL_IMPORT_LOOPBACK_ONLY": "Local import only available from 127.0.0.1 — open the dashboard from the host machine itself, not via a public domain",
     "ERR_LOCAL_IMPORT_FAILED": "Failed to scan local Windsurf credentials"
   },
-
   "footer": {
     "version": "Version",
     "langToggle": "Switch language",
     "langToggleToEn": "Switch to English",
     "langToggleToZh": "切换到中文"
   },
-
   "placeholder": {
     "noProxy": "No proxy"
   },
-
   "loginResult": {
     "success": "✓ Login Successful",
     "apiKeyGenerated": "API Key generated{{autoAdd}}",
@@ -1046,20 +1041,17 @@
     "successTitle": "Login Success",
     "addedToPool": "and added to account pool"
   },
-
   "timeRange": {
     "minutesAgo": "{{count}}m ago",
     "hoursAgo": "{{count}}h ago",
     "daysAgo": "{{count}}d ago"
   },
-
   "time": {
     "day": "d",
     "hour": "h",
     "minute": "m",
     "second": "s"
   },
-
   "prompt": {
     "editor": {
       "reset": "Reset",
@@ -1067,7 +1059,6 @@
       "templateHint": "{{model}} placeholder will be replaced with the requested model name."
     }
   },
-
   "ls": {
     "defaultInstance": "Default Instance",
     "noProxy": "No proxy",

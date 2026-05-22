@@ -14,11 +14,11 @@ import {
   setAccountBlockedModels, setAccountTokens, setAccountTier,
   getAccountInternal, isLocalBindHost, maskApiKey, safeEqualString,
   checkLockout, failedAuthAttempt, successfulAuthAttempt,
-  getDroughtSummary,
+  getDroughtSummary, getRateLimitSummary,
 } from '../auth.js';
 import { restartLsForProxy } from '../langserver.js';
 import { getLsStatus, stopLanguageServer, startLanguageServer, isLanguageServerRunning } from '../langserver.js';
-import { getStats, resetStats, recordRequest } from './stats.js';
+import { getStats, resetStats, recordRequest, getRateLimitBurstSummary } from './stats.js';
 import { cacheStats, cacheClear } from '../cache.js';
 import {
   getExperimental, setExperimental, getSystemPrompts, setSystemPrompts, resetSystemPrompt,
@@ -245,6 +245,7 @@ async function processWindsurfLogin({ email, password, loginProxy, autoAdd }) {
     // Persist the per-account proxy we used for login so chat requests
     // also egress through the same IP, then warm up a matching LS.
     if (loginProxy?.host) setAccountProxy(account.id, loginProxy);
+    else autoAssignProxy(account.id);
     ensureLsForAccount(account.id)
       .then(() => probeAccount(account.id))
       .catch(e => log.warn(`Auto-probe failed: ${e.message}`));
@@ -282,6 +283,7 @@ async function processWindsurfTokenImport({ email, token, loginProxy, autoAdd })
   if (autoAdd !== false) {
     account = addAccountByKey(cleanToken, cleanEmail);
     if (loginProxy?.host) setAccountProxy(account.id, loginProxy);
+    else autoAssignProxy(account.id);
     ensureLsForAccount(account.id)
       .then(() => probeAccount(account.id))
       .catch(e => log.warn(`Auto-probe failed: ${e.message}`));
@@ -297,6 +299,41 @@ async function processWindsurfTokenImport({ email, token, loginProxy, autoAdd })
     apiServerUrl: '',
     account: account ? { id: account.id, email: account.email, status: account.status } : null,
   };
+}
+
+const AUTO_PROXY_POOL = (() => {
+  const ports = [];
+  for (let p = 17801; p <= 17816; p++) ports.push(p);
+  return ports;
+})();
+const AUTO_PROXY_HOST = process.env.AUTO_PROXY_HOST || 'host.docker.internal';
+const AUTO_PROXY_TYPE = 'socks5';
+
+function autoAssignProxy(accountId) {
+  const cfg = getProxyConfig();
+  const perAccount = cfg.perAccount || {};
+  const countByPort = {};
+  for (const port of AUTO_PROXY_POOL) countByPort[port] = 0;
+  for (const cfg of Object.values(perAccount)) {
+    if (cfg && cfg.port && countByPort[cfg.port] !== undefined) {
+      countByPort[cfg.port]++;
+    }
+  }
+  let bestPort = AUTO_PROXY_POOL[0];
+  let bestCount = Infinity;
+  for (const port of AUTO_PROXY_POOL) {
+    if (countByPort[port] < bestCount) {
+      bestCount = countByPort[port];
+      bestPort = port;
+    }
+  }
+  setAccountProxy(accountId, {
+    type: AUTO_PROXY_TYPE,
+    host: AUTO_PROXY_HOST,
+    port: bestPort,
+  });
+  ensureLsForAccount(accountId).catch(e => log.warn(`LS ensure failed: ${e.message}`));
+  log.info(`Auto-assigned proxy ${AUTO_PROXY_TYPE}://${AUTO_PROXY_HOST}:${bestPort} to account ${accountId}`);
 }
 
 /**
@@ -389,6 +426,11 @@ export async function handleDashboardApi(method, subpath, body, req, res) {
         ? ((stats.successCount / stats.totalRequests) * 100).toFixed(1)
         : '0.0',
       cache: cacheStats(),
+      rateLimit: {
+        ...getRateLimitSummary(),
+        rateLimitedCount: stats.rateLimitedCount || 0,
+        ipCooldown: getRateLimitBurstSummary(),
+      },
     });
   }
 
@@ -628,6 +670,8 @@ export async function handleDashboardApi(method, subpath, body, req, res) {
       if (parsedProxy) {
         setAccountProxy(account.id, parsedProxy);
         ensureLsForAccount(account.id).catch(e => log.warn(`LS ensure failed: ${e.message}`));
+      } else {
+        autoAssignProxy(account.id);
       }
 
       // Fire-and-forget probe so the UI gets tier info shortly after add
@@ -1492,7 +1536,7 @@ export async function handleDashboardApi(method, subpath, body, req, res) {
           results.push({
             success: false,
             email: parsed.email || parsed.label || line.slice(0, 30),
-            error: isDup ? '账号已重复' : err.message,
+            error: isDup ? 'ERR_DUPLICATE_ACCOUNT' : err.message,
             isDuplicate: isDup,
             ...(isDup ? { duplicateAccount: err.duplicateAccount || null } : {}),
           });

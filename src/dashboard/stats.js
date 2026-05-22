@@ -32,6 +32,7 @@ const _state = {
   // v2.0.91 — track upstream rejection/cooldown events
   policyBlockedCount: 0,
   rateLimitedCount: 0,
+  rateLimitBurst: null,
 };
 
 // Load persisted stats
@@ -146,6 +147,9 @@ export function resetStats() {
     fresh_input: 0, cache_read: 0, cache_write: 0,
     output: 0, total: 0, requests_with_usage: 0,
   };
+  _state.policyBlockedCount = 0;
+  _state.rateLimitedCount = 0;
+  _state.rateLimitBurst = null;
   _state.startedAt = Date.now();
   scheduleSave();
 }
@@ -187,4 +191,28 @@ export function recordPolicyBlocked() {
 export function recordRateLimited() {
   _state.rateLimitedCount = (_state.rateLimitedCount || 0) + 1;
   scheduleSave();
+}
+
+export function recordRateLimitBurst({ model = '', count = 0, cooldownMs = 30_000, scope = 'ip' } = {}) {
+  const safeCooldownMs = Math.max(1000, Number(cooldownMs) || 30_000);
+  _state.rateLimitBurst = {
+    scope,
+    model: String(model || ''),
+    count: Math.max(0, Number(count) || 0),
+    lastTriggeredAt: Date.now(),
+    cooldownUntil: Date.now() + safeCooldownMs,
+  };
+  scheduleSave();
+}
+
+export function getRateLimitBurstSummary() {
+  const burst = _state.rateLimitBurst || null;
+  if (!burst) return { active: false };
+  const now = Date.now();
+  const remainingMs = Math.max(0, (burst.cooldownUntil || 0) - now);
+  return {
+    ...burst,
+    active: remainingMs > 0,
+    remainingMs,
+  };
 }
